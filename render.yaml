@@ -3,7 +3,7 @@ services:
     name: ostrich-customer-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
+    startCommand: python main.py
     plan: free
     envVars:
       - key: SECRET_KEY
