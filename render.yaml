@@ -3,18 +3,18 @@ services:
     name: ostrich-customer-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
     plan: free
     envVars:
       - key: SECRET_KEY
         value: customer-secret-key-production
       - key: DB_HOST
-        value: localhost
+        value: mysql-ostrich-tviazone-5922.i.aivencloud.com
       - key: DB_USER
-        value: root
+        value: avnadmin
       - key: DB_PASSWORD
-        value: Aru247899!
+        generateValue: true
       - key: DB_NAME
-        value: ostrich_db
+        value: defaultdb
       - key: DB_PORT
-        value: 3306
+        value: 16599
