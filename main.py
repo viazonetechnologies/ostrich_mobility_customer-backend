@@ -410,9 +410,9 @@ class Login(Resource):
         
         # Check if username is email or phone
         if '@' in username:
-            # Email login
+            # Email login - case insensitive
             customer = execute_query(
-                "SELECT * FROM customers WHERE email = %s AND password_hash = %s AND has_mobile_access = 1", 
+                "SELECT * FROM customers WHERE LOWER(email) = LOWER(%s) AND password_hash = %s AND has_mobile_access = 1", 
                 [username, hash_password(password)], 
                 fetch_one=True
             )
@@ -1454,7 +1454,7 @@ class RelatedPurchases(Resource):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8001))
-    debug_mode = os.getenv('FLASK_ENV', 'production') == 'development'
+    debug_mode = os.getenv('FLASK_ENV', 'production') != 'production'
     print(f"Starting Ostrich Customer API on port {port}")
     print(f"Swagger UI: http://localhost:{port}/docs/")
     print("Database: Connected to MySQL (Aiven)")
