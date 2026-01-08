@@ -8,16 +8,14 @@ services:
       - key: FLASK_ENV
         value: production
       - key: SECRET_KEY
-        generateValue: true
+        value: your-secret-key-here
       - key: DB_HOST
-        fromService:
-          type: pserv
-          name: mysql-ostrich-tviazone-5922.i.aivencloud.com
+        value: your-db-host
       - key: DB_USER
-        value: avnadmin
+        value: your-db-user
       - key: DB_PASSWORD
-        sync: false
+        value: your-db-password
       - key: DB_NAME
-        value: defaultdb
+        value: your-db-name
       - key: DB_PORT
-        value: "16599"
+        value: "3306"
