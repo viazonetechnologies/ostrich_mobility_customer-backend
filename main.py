@@ -271,7 +271,7 @@ register_model = api.model('Register', {
 })
 
 login_model = api.model('Login', {
-    'username': fields.String(required=True, description='Phone number', example='9876543210'),
+    'username': fields.String(required=True, description='Phone number or email', example='9876543210 or user@example.com'),
     'password': fields.String(required=True, description='Password', example='password123')
 })
 
@@ -395,25 +395,34 @@ class VerifyOTP(Resource):
 @auth_ns.route('/login')
 class Login(Resource):
     @auth_ns.expect(login_model)
-    @auth_ns.doc('login', description='Customer login with phone and password')
+    @auth_ns.doc('login', description='Customer login with phone/email and password')
     @auth_ns.response(200, 'Success', standard_response)
     @auth_ns.response(400, 'Bad Request', error_response)
     @auth_ns.response(401, 'Unauthorized', error_response)
     def post(self):
-        """Customer login with phone and password"""
+        """Customer login with phone/email and password"""
         data = request.get_json()
-        phone = data.get('username')  # Using username field for phone
+        username = data.get('username')  # Can be phone or email
         password = data.get('password')
         
-        if not phone or not password:
-            return {"message": "Phone and password are required", "status": False, "data": None}, 400
+        if not username or not password:
+            return {"message": "Username and password are required", "status": False, "data": None}, 400
         
-        # Check customer in database
-        customer = execute_query(
-            "SELECT * FROM customers WHERE phone = %s AND password_hash = %s AND has_mobile_access = 1", 
-            [phone, hash_password(password)], 
-            fetch_one=True
-        )
+        # Check if username is email or phone
+        if '@' in username:
+            # Email login
+            customer = execute_query(
+                "SELECT * FROM customers WHERE email = %s AND password_hash = %s AND has_mobile_access = 1", 
+                [username, hash_password(password)], 
+                fetch_one=True
+            )
+        else:
+            # Phone login
+            customer = execute_query(
+                "SELECT * FROM customers WHERE phone = %s AND password_hash = %s AND has_mobile_access = 1", 
+                [username, hash_password(password)], 
+                fetch_one=True
+            )
         
         if customer:
             # Update last login
@@ -425,7 +434,7 @@ class Login(Resource):
                     conn.commit()
                     cursor.close()
             
-            access_token = create_access_token({"sub": str(customer['id']), "phone": phone})
+            access_token = create_access_token({"sub": str(customer['id']), "username": username})
             return {
                 "message": "Login successful",
                 "status": True,
@@ -433,11 +442,12 @@ class Login(Resource):
                     "access_token": access_token,
                     "customer_id": customer['id'],
                     "name": customer.get('individual_name') or customer.get('contact_person'),
-                    "phone": phone
+                    "phone": customer.get('phone'),
+                    "email": customer.get('email')
                 }
             }
         
-        return {"message": "Invalid phone number or password", "status": False, "data": None}, 401
+        return {"message": "Invalid credentials", "status": False, "data": None}, 401
 
 @auth_ns.route('/register')
 class Register(Resource):
