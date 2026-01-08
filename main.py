@@ -449,6 +449,21 @@ class Login(Resource):
         
         return {"message": "Invalid credentials", "status": False, "data": None}, 401
 
+@auth_ns.route('/logout')
+class Logout(Resource):
+    @auth_ns.doc('logout', description='Customer logout', security='Bearer')
+    @auth_ns.response(200, 'Success', standard_response)
+    @token_required
+    def post(self, current_user):
+        """Customer logout"""
+        return {
+            "message": "Logout successful",
+            "status": True,
+            "data": {
+                "logged_out_at": datetime.now().isoformat()
+            }
+        }
+
 @auth_ns.route('/register')
 class Register(Resource):
     @auth_ns.expect(register_model)
