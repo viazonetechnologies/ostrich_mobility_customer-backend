@@ -11,6 +11,10 @@ import time
 import pymysql
 from contextlib import contextmanager
 import hashlib
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # JSON serialization fix
 def json_serializer(obj):
@@ -88,26 +92,32 @@ def hash_password(password):
 # JWT utilities
 def create_access_token(data):
     payload = data.copy()
-    payload['exp'] = datetime.now() + timedelta(hours=24)
+    # Remove expiration - token never expires
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 def verify_token(token):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         return payload
-    except:
+    except jwt.InvalidTokenError:
+        return None
+    except Exception:
         return None
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get('Authorization')
-        if token and token.startswith('Bearer '):
-            token = token[7:]
-            payload = verify_token(token)
-            if payload:
-                return f(current_user=payload, *args, **kwargs)
-        return {"message": "Token required", "status": False, "data": None}, 401
+        if not token or not token.startswith('Bearer '):
+            return {"message": "Token required", "status": False, "data": None}, 401
+        
+        token = token[7:]
+        payload = verify_token(token)
+        
+        if payload is None:
+            return {"message": "Invalid token", "status": False, "data": None}, 401
+        
+        return f(current_user=payload, *args, **kwargs)
     return decorated
 
 # Standard response helper
