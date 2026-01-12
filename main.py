@@ -142,30 +142,42 @@ def get_customer_data(customer_id):
     return execute_query("SELECT * FROM customers WHERE id = %s", [customer_id], fetch_one=True)
 
 def get_customer_products(customer_id):
-    return execute_query(
-        "SELECT p.*, si.serial_number, si.warranty_start_date, si.warranty_end_date FROM products p "
-        "LEFT JOIN sale_items si ON p.id = si.product_id "
-        "LEFT JOIN sales s ON si.sale_id = s.id "
-        "WHERE s.customer_id = %s", 
-        [customer_id]
-    )
+    try:
+        return execute_query(
+            "SELECT p.*, si.serial_number, si.warranty_start_date, si.warranty_end_date FROM products p "
+            "LEFT JOIN sale_items si ON p.id = si.product_id "
+            "LEFT JOIN sales s ON si.sale_id = s.id "
+            "WHERE s.customer_id = %s", 
+            [customer_id]
+        )
+    except Exception as e:
+        print(f"get_customer_products error: {e}")
+        return []
 
 def get_customer_services(customer_id):
-    return execute_query(
-        "SELECT st.*, p.name as product_name FROM service_tickets st "
-        "LEFT JOIN products p ON st.product_id = p.id "
-        "WHERE st.customer_id = %s ORDER BY st.created_at DESC", 
-        [customer_id]
-    )
+    try:
+        return execute_query(
+            "SELECT st.*, p.name as product_name FROM service_tickets st "
+            "LEFT JOIN products p ON st.product_id = p.id "
+            "WHERE st.customer_id = %s ORDER BY st.created_at DESC", 
+            [customer_id]
+        )
+    except Exception as e:
+        print(f"get_customer_services error: {e}")
+        return []
 
 def get_customer_orders(customer_id):
-    return execute_query(
-        "SELECT s.*, GROUP_CONCAT(p.name) as products FROM sales s "
-        "LEFT JOIN sale_items si ON s.id = si.sale_id "
-        "LEFT JOIN products p ON si.product_id = p.id "
-        "WHERE s.customer_id = %s GROUP BY s.id ORDER BY s.sale_date DESC", 
-        [customer_id]
-    )
+    try:
+        return execute_query(
+            "SELECT s.*, GROUP_CONCAT(p.name) as products FROM sales s "
+            "LEFT JOIN sale_items si ON s.id = si.sale_id "
+            "LEFT JOIN products p ON si.product_id = p.id "
+            "WHERE s.customer_id = %s GROUP BY s.id ORDER BY s.sale_date DESC", 
+            [customer_id]
+        )
+    except Exception as e:
+        print(f"get_customer_orders error: {e}")
+        return []
 
 def get_customer_notifications(customer_id):
     return execute_query(
