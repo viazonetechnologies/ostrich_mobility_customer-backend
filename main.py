@@ -16,10 +16,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from decimal import Decimal
+
 # JSON serialization fix
 def json_serializer(obj):
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj)
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 app = Flask(__name__)
@@ -73,17 +77,21 @@ def execute_query(query, params=None, fetch_one=False):
                     result = cursor.fetchall()
                 cursor.close()
                 
-                # Convert datetime objects to strings
+                # Convert datetime and decimal objects to serializable types
                 if result:
                     if fetch_one:
                         for key, value in result.items():
                             if isinstance(value, (datetime, date)):
                                 result[key] = value.isoformat()
+                            elif isinstance(value, Decimal):
+                                result[key] = float(value)
                     else:
                         for row in result:
                             for key, value in row.items():
                                 if isinstance(value, (datetime, date)):
                                     row[key] = value.isoformat()
+                                elif isinstance(value, Decimal):
+                                    row[key] = float(value)
                 
                 return result
             else:
