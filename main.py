@@ -55,36 +55,45 @@ def get_db_connection():
         yield connection
     except Exception as e:
         print(f"Database connection failed: {e}")
+        print(f"DB Config: host={DB_CONFIG['host']}, port={DB_CONFIG['port']}, db={DB_CONFIG['database']}")
         yield None
     finally:
         if connection:
             connection.close()
 
 def execute_query(query, params=None, fetch_one=False):
-    with get_db_connection() as conn:
-        if conn:
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-            cursor.execute(query, params or [])
-            if fetch_one:
-                result = cursor.fetchone()
-            else:
-                result = cursor.fetchall()
-            cursor.close()
-            
-            # Convert datetime objects to strings
-            if result:
+    try:
+        with get_db_connection() as conn:
+            if conn:
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+                cursor.execute(query, params or [])
                 if fetch_one:
-                    for key, value in result.items():
-                        if isinstance(value, (datetime, date)):
-                            result[key] = value.isoformat()
+                    result = cursor.fetchone()
                 else:
-                    for row in result:
-                        for key, value in row.items():
+                    result = cursor.fetchall()
+                cursor.close()
+                
+                # Convert datetime objects to strings
+                if result:
+                    if fetch_one:
+                        for key, value in result.items():
                             if isinstance(value, (datetime, date)):
-                                row[key] = value.isoformat()
-            
-            return result
-    return None if fetch_one else []
+                                result[key] = value.isoformat()
+                    else:
+                        for row in result:
+                            for key, value in row.items():
+                                if isinstance(value, (datetime, date)):
+                                    row[key] = value.isoformat()
+                
+                return result
+            else:
+                print("Database connection is None")
+                return None if fetch_one else []
+    except Exception as e:
+        print(f"Query execution failed: {e}")
+        print(f"Query: {query}")
+        print(f"Params: {params}")
+        return None if fetch_one else []
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -623,17 +632,21 @@ class Products(Resource):
     @token_required
     def get(self, current_user):
         """Get customer products"""
-        customer_id = current_user.get('sub', '1')
-        products = get_customer_products(customer_id)
-        
-        return {
-            "message": "Products retrieved successfully",
-            "status": True,
-            "data": {
-                "products": products,
-                "total_count": len(products)
+        try:
+            customer_id = current_user.get('sub', '1')
+            products = get_customer_products(customer_id)
+            
+            return {
+                "message": "Products retrieved successfully",
+                "status": True,
+                "data": {
+                    "products": products,
+                    "total_count": len(products)
+                }
             }
-        }
+        except Exception as e:
+            print(f"Products error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
 
 @products_ns.route('/<int:product_id>')
 class ProductDetails(Resource):
@@ -641,18 +654,22 @@ class ProductDetails(Resource):
     @token_required
     def get(self, product_id, current_user):
         """Get product details"""
-        customer_id = current_user.get('sub', '1')
-        products = get_customer_products(customer_id)
-        product = next((p for p in products if p.get('id') == product_id), None)
-        
-        if not product:
-            return {"message": "Product not found", "status": False, "data": None}, 404
-        
-        return {
-            "message": "Product details retrieved successfully",
-            "status": True,
-            "data": product
-        }
+        try:
+            customer_id = current_user.get('sub', '1')
+            products = get_customer_products(customer_id)
+            product = next((p for p in products if p.get('id') == product_id), None)
+            
+            if not product:
+                return {"message": "Product not found", "status": False, "data": None}, 404
+            
+            return {
+                "message": "Product details retrieved successfully",
+                "status": True,
+                "data": product
+            }
+        except Exception as e:
+            print(f"Product details error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
 
 # Services endpoints
 @services_ns.route('/')
@@ -1053,44 +1070,74 @@ class CatalogProducts(Resource):
     })
     def get(self):
         """Get product catalog from database"""
-        category = request.args.get('category')
-        search = request.args.get('search')
-        
-        query = "SELECT p.*, pc.name as category_name FROM products p LEFT JOIN product_categories pc ON p.category_id = pc.id WHERE p.is_active = 1"
-        params = []
-        
-        if category:
-            query += " AND pc.name = %s"
-            params.append(category)
-        
-        if search:
-            query += " AND (p.name LIKE %s OR p.description LIKE %s)"
-            params.extend([f"%{search}%", f"%{search}%"])
-        
-        products = execute_query(query, params)
-        
-        return {
-            "message": "Product catalog retrieved successfully",
-            "status": True,
-            "data": {
-                "products": products
+        try:
+            category = request.args.get('category')
+            search = request.args.get('search')
+            
+            query = "SELECT p.*, pc.name as category_name FROM products p LEFT JOIN product_categories pc ON p.category_id = pc.id WHERE p.is_active = 1"
+            params = []
+            
+            if category:
+                query += " AND pc.name = %s"
+                params.append(category)
+            
+            if search:
+                query += " AND (p.name LIKE %s OR p.description LIKE %s)"
+                params.extend([f"%{search}%", f"%{search}%"])
+            
+            products = execute_query(query, params)
+            
+            return {
+                "message": "Product catalog retrieved successfully",
+                "status": True,
+                "data": {
+                    "products": products
+                }
             }
-        }
+        except Exception as e:
+            print(f"Catalog products error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
+
+# Add a public products endpoint that doesn't require authentication
+@products_ns.route('/catalog')
+class PublicProducts(Resource):
+    @products_ns.doc('get_public_products', description='Get all products (public access)')
+    def get(self):
+        """Get all products without authentication"""
+        try:
+            query = "SELECT p.*, pc.name as category_name FROM products p LEFT JOIN product_categories pc ON p.category_id = pc.id WHERE p.is_active = 1 ORDER BY p.name"
+            products = execute_query(query)
+            
+            return {
+                "message": "Products retrieved successfully",
+                "status": True,
+                "data": {
+                    "products": products,
+                    "total_count": len(products)
+                }
+            }
+        except Exception as e:
+            print(f"Public products error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
 
 @catalog_ns.route('/categories')
 class CatalogCategories(Resource):
     @catalog_ns.doc('get_categories', description='Get product categories')
     def get(self):
         """Get product categories from database"""
-        categories = execute_query("SELECT * FROM product_categories WHERE is_active = 1 ORDER BY display_order")
-        
-        return {
-            "message": "Categories retrieved successfully",
-            "status": True,
-            "data": {
-                "categories": categories
+        try:
+            categories = execute_query("SELECT * FROM product_categories WHERE is_active = 1 ORDER BY display_order")
+            
+            return {
+                "message": "Categories retrieved successfully",
+                "status": True,
+                "data": {
+                    "categories": categories
+                }
             }
-        }
+        except Exception as e:
+            print(f"Categories error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
 
 # Missing Authentication Endpoints - Forgot Password
 @auth_ns.route('/forgot-password')
@@ -1306,24 +1353,28 @@ class TrendingProducts(Resource):
     @products_ns.doc('get_trending_products', description='Get trending products')
     def get(self):
         """Get trending products"""
-        limit = int(request.args.get('limit', 10))
-        
-        trending = execute_query(
-            "SELECT p.*, pc.name as category_name, COUNT(si.id) as sales_count "
-            "FROM products p "
-            "LEFT JOIN product_categories pc ON p.category_id = pc.id "
-            "LEFT JOIN sale_items si ON p.id = si.product_id "
-            "WHERE p.is_active = 1 "
-            "GROUP BY p.id "
-            "ORDER BY sales_count DESC, p.created_at DESC "
-            f"LIMIT {limit}"
-        )
-        
-        return {
-            "message": "Trending products retrieved successfully",
-            "status": True,
-            "data": {"trending_products": trending}
-        }
+        try:
+            limit = int(request.args.get('limit', 10))
+            
+            trending = execute_query(
+                "SELECT p.*, pc.name as category_name, COUNT(si.id) as sales_count "
+                "FROM products p "
+                "LEFT JOIN product_categories pc ON p.category_id = pc.id "
+                "LEFT JOIN sale_items si ON p.id = si.product_id "
+                "WHERE p.is_active = 1 "
+                "GROUP BY p.id "
+                "ORDER BY sales_count DESC, p.created_at DESC "
+                f"LIMIT {limit}"
+            )
+            
+            return {
+                "message": "Trending products retrieved successfully",
+                "status": True,
+                "data": {"trending_products": trending}
+            }
+        except Exception as e:
+            print(f"Trending products error: {e}")
+            return {"message": "Internal Server Error", "status": False, "data": None}, 500
 
 @products_ns.route('/<int:product_id>/images')
 class ProductImages(Resource):
