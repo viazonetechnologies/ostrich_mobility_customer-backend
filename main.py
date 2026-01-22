@@ -1067,17 +1067,83 @@ class FileUpload(Resource):
 
 @utilities_ns.route('/settings')
 class Settings(Resource):
-    @utilities_ns.doc('get_settings', description='Get user settings', security='Bearer')
+    @utilities_ns.doc('get_settings', description='Get user preferences', security='Bearer')
     @token_required
     def get(self, current_user):
-        """Get settings"""
+        """Get user preferences"""
+        customer_id = current_user.get('sub')
+        prefs = execute_query(
+            "SELECT email_notifications, sms_notifications, push_notifications, location_sharing FROM customer_preferences WHERE customer_id = %s",
+            [customer_id],
+            fetch_one=True
+        )
+        
+        if not prefs:
+            with get_db_connection() as conn:
+                if conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO customer_preferences (customer_id) VALUES (%s)",
+                        [customer_id]
+                    )
+                    conn.commit()
+                    cursor.close()
+            prefs = {'email_notifications': True, 'sms_notifications': True, 'push_notifications': True, 'location_sharing': False}
+        
         return {
-            "message": "Settings retrieved successfully",
+            "message": "Preferences retrieved successfully",
             "status": True,
             "data": {
-                "notifications": True,
-                "sms_alerts": True,
-                "email_updates": True
+                "email_notifications": bool(prefs.get('email_notifications', True)),
+                "sms_notifications": bool(prefs.get('sms_notifications', True)),
+                "push_notifications": bool(prefs.get('push_notifications', True)),
+                "location_sharing": bool(prefs.get('location_sharing', False))
+            }
+        }
+    
+    @utilities_ns.expect(api.model('UpdatePreferences', {
+        'email_notifications': fields.Boolean(description='Email notifications enabled'),
+        'sms_notifications': fields.Boolean(description='SMS notifications enabled'),
+        'push_notifications': fields.Boolean(description='Push notifications enabled'),
+        'location_sharing': fields.Boolean(description='Location sharing enabled')
+    }))
+    @utilities_ns.doc('update_settings', description='Update user preferences', security='Bearer')
+    @token_required
+    def put(self, current_user):
+        """Update user preferences"""
+        data = request.get_json()
+        customer_id = current_user.get('sub')
+        
+        email_notifications = data.get('email_notifications')
+        sms_notifications = data.get('sms_notifications')
+        push_notifications = data.get('push_notifications')
+        location_sharing = data.get('location_sharing')
+        
+        with get_db_connection() as conn:
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """INSERT INTO customer_preferences (customer_id, email_notifications, sms_notifications, push_notifications, location_sharing)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                    email_notifications = VALUES(email_notifications),
+                    sms_notifications = VALUES(sms_notifications),
+                    push_notifications = VALUES(push_notifications),
+                    location_sharing = VALUES(location_sharing)""",
+                    [customer_id, email_notifications, sms_notifications, push_notifications, location_sharing]
+                )
+                conn.commit()
+                cursor.close()
+        
+        return {
+            "message": "Preferences updated successfully",
+            "status": True,
+            "data": {
+                "email_notifications": email_notifications,
+                "sms_notifications": sms_notifications,
+                "push_notifications": push_notifications,
+                "location_sharing": location_sharing,
+                "updated_at": datetime.now().isoformat()
             }
         }
 
