@@ -754,12 +754,19 @@ class ServiceRequest(Resource):
         if not product_id or not issue_description:
             return {"message": "Product ID and issue description are required", "status": False, "data": None}, 400
         
-        # Generate ticket number
-        ticket_number = f"SRV{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
         with get_db_connection() as conn:
             if conn:
-                cursor = conn.cursor()
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+                
+                # Generate ticket number matching webapp pattern
+                cursor.execute("SELECT ticket_number FROM service_tickets ORDER BY id DESC LIMIT 1")
+                last_ticket = cursor.fetchone()
+                if last_ticket and last_ticket['ticket_number']:
+                    last_num = int(last_ticket['ticket_number'][3:])
+                    ticket_number = f"SRV{str(last_num + 1).zfill(6)}"
+                else:
+                    ticket_number = "SRV000001"
+                
                 cursor.execute(
                     "INSERT INTO service_tickets (customer_id, product_id, ticket_number, issue_description, priority) VALUES (%s, %s, %s, %s, %s)",
                     [customer_id, product_id, ticket_number, issue_description, priority]
@@ -975,12 +982,19 @@ class Enquiries(Resource):
             if not message:
                 return {"message": "Message is required", "status": False, "data": None}, 400
             
-            # Generate enquiry number
-            enquiry_number = f"ENQ{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
             with get_db_connection() as conn:
                 if conn:
-                    cursor = conn.cursor()
+                    cursor = conn.cursor(pymysql.cursors.DictCursor)
+                    
+                    # Generate enquiry number matching webapp pattern
+                    cursor.execute("SELECT enquiry_number FROM enquiries ORDER BY id DESC LIMIT 1")
+                    last_enquiry = cursor.fetchone()
+                    if last_enquiry and last_enquiry['enquiry_number']:
+                        last_num = int(last_enquiry['enquiry_number'][3:])
+                        enquiry_number = f"ENQ{str(last_num + 1).zfill(6)}"
+                    else:
+                        enquiry_number = "ENQ000001"
+                    
                     cursor.execute(
                         "INSERT INTO enquiries (customer_id, enquiry_number, message, product_id) VALUES (%s, %s, %s, %s)",
                         [customer_id, enquiry_number, message, product_id]
