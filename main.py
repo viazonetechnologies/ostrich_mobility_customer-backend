@@ -164,12 +164,18 @@ def get_customer_products(customer_id):
 
 def get_customer_services(customer_id):
     try:
-        return execute_query(
+        services = execute_query(
             "SELECT st.*, p.name as product_name FROM service_tickets st "
             "LEFT JOIN products p ON st.product_id = p.id "
             "WHERE st.customer_id = %s ORDER BY st.created_at DESC", 
             [customer_id]
         )
+        # Ensure product_name is included in response
+        for service in services:
+            if not service.get('product_name') and service.get('product_id'):
+                product = execute_query("SELECT name FROM products WHERE id = %s", [service['product_id']], fetch_one=True)
+                service['product_name'] = product['name'] if product else f"Product #{service['product_id']}"
+        return services
     except Exception as e:
         print(f"get_customer_services error: {e}")
         return []
@@ -615,6 +621,9 @@ class Dashboard(Resource):
             except:
                 notifications = []
             
+            # Count unread notifications (is_read = 0 or False)
+            unread_count = len([n for n in notifications if not n.get('is_read')])
+            
             return {
                 "message": "Dashboard data retrieved successfully",
                 "status": True,
@@ -630,11 +639,12 @@ class Dashboard(Resource):
                         "total_products": len(products),
                         "active_services": len([s for s in services if s.get('status') in ['SCHEDULED', 'IN_PROGRESS']]),
                         "completed_services": len([s for s in services if s.get('status') == 'COMPLETED']),
-                        "warranty_products": 0
+                        "warranty_products": 0,
+                        "unread_notifications": unread_count
                     },
                     "recent_services": services[:3],
                     "notifications": {
-                        "unread_count": len([n for n in notifications if not n.get('is_read')]),
+                        "unread_count": unread_count,
                         "latest": notifications[:3]
                     }
                 }
@@ -712,6 +722,20 @@ class Services(Resource):
                 "services": services,
                 "total_count": len(services)
             }
+        }
+
+@services_ns.route('/my-products')
+class MyProducts(Resource):
+    @services_ns.doc('get_my_products', description='Get products purchased by customer for service request', security='Bearer')
+    @token_required
+    def get(self, current_user):
+        """Get list of products purchased by customer"""
+        customer_id = current_user.get('sub')
+        products = get_customer_products(customer_id)
+        return {
+            "message": "Customer products retrieved successfully",
+            "status": True,
+            "data": {"products": products}
         }
 
 @services_ns.route('/request')
